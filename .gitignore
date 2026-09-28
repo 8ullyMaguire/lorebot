@@ -1,0 +1,8 @@
+/target
+*.sqlite
+*.sqlite3
+*.db
+# The token store. Encrypted, and still a secret: it is the only thing standing
+# between a copied file and a revoked user's account.
+*.store
+lorebot-store.json

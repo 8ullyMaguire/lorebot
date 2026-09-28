@@ -1,0 +1,6 @@
+[toolchain]
+# A floor, not a pin: any 1.82+ toolchain builds this. Pinning the exact patch
+# would make a security update to the toolchain a change to this file, and the
+# two repos would drift.
+channel = "1.82"
+components = ["clippy", "rustfmt"]

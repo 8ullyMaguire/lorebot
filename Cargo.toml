@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+# Glob, not an explicit list: adding an adapter is a directory, not a root
+# edit. With an explicit list the fourth adapter is a change to this file, and
+# a forgotten entry is a crate that silently never builds.
+members = ["crates/*"]
+
+# Matching Lorehaven's floor, so one toolchain builds both. Pinned in the
+# workspace rather than per crate so a crate cannot quietly require more.
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT"
+
+# The bot is a network client, not a compute job. One codegen unit and no LTO
+# in dev because the build is dominated by dependency compilation, not by this
+# code, and a slow edit loop costs more than a slow release.
+[profile.dev]
+opt-level = 0
+
+[profile.release]
+lto = "thin"
