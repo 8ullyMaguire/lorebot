@@ -95,6 +95,35 @@ pub enum BotError {
 /// The bot's result alias.
 pub type Result<T> = std::result::Result<T, BotError>;
 
+impl From<lorebot_api::ApiError> for BotError {
+    /// Map a client error onto the core's vocabulary.
+    ///
+    /// The mapping is by *kind*, not by string: `Revoked` and `ScopeDenied`
+    /// stay distinct because the remedy differs, and `ScopeNotHeld` — a bug in
+    /// this repository rather than anything the reader did — becomes
+    /// [`BotError::Other`] with the explanation intact, so it surfaces in a log
+    /// rather than being reported to a user as their problem.
+    fn from(error: lorebot_api::ApiError) -> Self {
+        use lorebot_api::ApiError as E;
+        match error {
+            E::Revoked => Self::Revoked,
+            E::ScopeDenied {
+                needed, explain, ..
+            } => Self::ScopeDenied {
+                needed: format!("{needed} ({explain})"),
+                granted: String::new(),
+            },
+            E::Transport(inner) => Self::Http(inner),
+            E::Decode(inner) => Self::Json(inner),
+            E::Envelope { code, message, .. } => Self::Api { code, message },
+            E::Status { status } => Self::Status { status },
+            E::ScopeNotHeld { needed, granted } => Self::Other(format!(
+                "bug: this action needs {needed}, and the token only has {granted}"
+            )),
+        }
+    }
+}
+
 /// Whether an error means "this token will never work again".
 ///
 /// Worth a function because three call sites need the same answer — the
