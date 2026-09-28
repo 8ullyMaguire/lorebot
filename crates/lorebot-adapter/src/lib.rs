@@ -30,7 +30,12 @@
 //! a test in [`conformance`] that every adapter runs.
 
 use lorebot_core::core::PlatformMessage;
-use lorebot_core::dispatch::{Actor, Inbound};
+use lorebot_core::dispatch::Actor;
+
+// Re-exported so an adapter needs one import. The core owns the type; the
+// adapter crate is where it is used, and forwarding it here keeps the `impl
+// Adapter for` signature readable.
+pub use lorebot_core::dispatch::Inbound;
 
 pub mod conformance;
 

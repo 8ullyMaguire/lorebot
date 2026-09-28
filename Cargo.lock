@@ -755,6 +755,51 @@ dependencies = [
 ]
 
 [[package]]
+name = "lorebot-discord"
+version = "0.1.0"
+dependencies = [
+ "lorebot-adapter",
+ "lorebot-api",
+ "lorebot-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "lorebot-matrix"
+version = "0.1.0"
+dependencies = [
+ "lorebot-adapter",
+ "lorebot-api",
+ "lorebot-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "lorebot-telegram"
+version = "0.1.0"
+dependencies = [
+ "lorebot-adapter",
+ "lorebot-api",
+ "lorebot-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "lru-slab"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
