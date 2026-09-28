@@ -1,0 +1,31 @@
+[package]
+name = "lorebot"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "A thin REST client for your Lorehaven instance, on Discord, Telegram and Matrix"
+
+[[bin]]
+name = "lorebot"
+path = "src/main.rs"
+
+[dependencies]
+lorebot-adapter = { path = "../lorebot-adapter" }
+lorebot-core = { path = "../lorebot-core" }
+lorebot-api = { path = "../lorebot-api" }
+lorebot-discord = { path = "../lorebot-discord" }
+lorebot-matrix = { path = "../lorebot-matrix" }
+lorebot-telegram = { path = "../lorebot-telegram" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+# `join_all` over the adapter tasks. Not a futures framework: one function, in a
+# binary, to await three JoinHandles without writing the poll loop by hand.
+futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "sync", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
