@@ -1,0 +1,19 @@
+[package]
+name = "lorebot-adapter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The Adapter trait, its render matrix, and the conformance suite every platform must pass"
+
+[dependencies]
+lorebot-core = { path = "../lorebot-core" }
+lorebot-api = { path = "../lorebot-api" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "time"] }
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
