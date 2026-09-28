@@ -12,7 +12,7 @@ a renderer that contradicts it fails the suite.
 
 | | Discord | Telegram | Matrix |
 |---|---|---|---|
-| ephemeral / private | yes (`flags: 64`) | yes (1:1 chat) | no |
+| ephemeral / private | yes (`flags: 64`) | yes (1:1 chat) | **no** |
 | buttons | yes | yes (inline keyboard) | no — text |
 | files | yes | caption | no |
 | mention to address | required in guilds | `@botusername` or a reply | `m.room.message` or a reply |

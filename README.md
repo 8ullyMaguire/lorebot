@@ -113,8 +113,13 @@ Matrix it cannot be — see below.
   room, in every client's history, in the homeserver's database, forever. So
   the adapter refuses a private message and tells the reader why, rather than
   posting a private library result to a room. A Matrix deployment that needs
-  this needs a Matrix deployment with an authenticated media store or a DM
-  room, and the bot will point at it.
+  this needs a DM room, and the bot will point at it.
+
+  This one was wrong in the first draft: `MATRIX.ephemeral` was `true`, which
+  did not make Matrix private — it made the adapter post a private result to a
+  room while the capability table claimed it was safe. An end-to-end test caught
+  it, and four tests that encoded the same wrong assumption had to be rewritten
+  to assert the refusal instead.
 
 ## Layout
 

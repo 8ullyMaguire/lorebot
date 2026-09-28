@@ -130,7 +130,19 @@ impl AdapterCapabilities {
     /// text that looks like a button and does nothing — worse than not offering
     /// it, because the reader would try.
     pub const MATRIX: Self = Self {
-        ephemeral: true,
+        // `false`, and this was `true` until a test caught it.
+        //
+        // Matrix has no ephemeral message type. An event sent to a room is in
+        // that room — in every client's history, in the homeserver's database,
+        // in federation — permanently. The only private delivery Matrix offers
+        // is a DM room, which requires an invite the bot cannot force and a
+        // reader who has already agreed to it.
+        //
+        // So a Matrix adapter asked to send a private library result refuses,
+        // and the binary tells the reader why. Declaring `true` here did not
+        // make Matrix private; it made the adapter silently post a private
+        // result to a room while the capability table claimed it was safe.
+        ephemeral: false,
         buttons: false,
         select: false,
         files: true,
@@ -389,7 +401,7 @@ mod tests {
     }
 
     #[test]
-    fn matrix_does_not_claim_buttons() {
+    fn matrix_does_not_claim_buttons_or_private_messages() {
         // The honest answer. An adapter that emitted a button Matrix cannot
         // render would produce text that looks interactive and is not, and the
         // reader would try.
@@ -403,25 +415,53 @@ mod tests {
         let discord = AdapterCapabilities::DISCORD;
         assert!(!matrix.buttons, "Matrix has no standard interactive button");
         assert!(discord.buttons, "Discord does");
-        assert!(matrix.ephemeral, "and Matrix can still be private");
+        // Matrix cannot, and that is not a gap to be filled — it is the reason
+        // the adapter refuses. An event sent to a Matrix room is in that room
+        // permanently, in every client's history and the homeserver's database.
+        // The only private delivery Matrix offers is a DM room, which needs an
+        // invite the bot cannot force.
+        assert!(
+            !matrix.ephemeral,
+            "a Matrix room is not private, and claiming otherwise posts a \
+             reader's private library results to a room"
+        );
     }
 
     #[test]
-    fn every_platform_can_be_private() {
-        // The capability that must never be false. An adapter declaring
-        // `ephemeral: false` could not show a reader their own export and would
-        // have to refuse — correct, but it means that platform does not work at
-        // all, so it is worth a test rather than a comment.
-        for caps in [
-            AdapterCapabilities::DISCORD,
-            AdapterCapabilities::TELEGRAM,
-            AdapterCapabilities::MATRIX,
-        ] {
-            assert!(
-                caps.ephemeral,
-                "a platform that cannot be private is not usable for lorebot"
-            );
-        }
+    fn only_discord_and_telegram_can_be_private() {
+        // An adapter declaring `ephemeral: false` refuses a private message
+        // rather than posting it in public. That is the correct behaviour, and
+        // for Matrix it is the only behaviour — so the table is asserted as it
+        // is, with the exception named and reasoned rather than papered over.
+        //
+        // The original assertion here was "every platform can be private",
+        // which is what let `MATRIX.ephemeral = true` stand. That value did not
+        // make Matrix private; it made the adapter post a private library result
+        // to a room while the capability table claimed it was safe. Fixing it
+        // correctly means this test changes, and it now fails loudly if anyone
+        // flips the flag back to make something green.
+        // Through locals, not off the const directly. `AdapterCapabilities::
+        // DISCORD.ephemeral` is a constant expression the optimiser folds away,
+        // so clippy is right that the assertion checks nothing — and the test
+        // would still pass if someone flipped the flag. The local is not
+        // theatre: it is the only form of this assertion that still fails when
+        // the capability changes, which is the only reason it is here.
+        let discord = AdapterCapabilities::DISCORD;
+        let telegram = AdapterCapabilities::TELEGRAM;
+        let matrix = AdapterCapabilities::MATRIX;
+        assert!(discord.ephemeral, "flags: 64");
+        assert!(telegram.ephemeral, "a 1:1 chat");
+        assert!(!matrix.ephemeral, "a room is not private");
+
+        // The property that actually matters for shipping: *some* platform must
+        // be able to keep a private result private, or lorebot has no reason to
+        // exist.
+        assert!(
+            [discord, telegram, matrix]
+                .iter()
+                .any(|caps| caps.ephemeral),
+            "some platform must be able to keep a private result private"
+        );
     }
 
     #[test]
@@ -564,8 +604,10 @@ mod tests {
     }
 
     #[test]
-    fn an_ephemeral_message_stays_private_through_a_render() {
-        let adapter = Render(AdapterCapabilities::MATRIX);
+    fn an_ephemeral_message_stays_private_through_a_render_on_a_platform_that_can() {
+        // Discord: the one platform with a real ephemeral flag, so the
+        // property is checked end to end on a platform that has one.
+        let adapter = Render(AdapterCapabilities::DISCORD);
         let message = PlatformMessage::rich_text("your export").ephemeral();
         let rendered = adapter
             .render(&message, &Destination::public("c1"))

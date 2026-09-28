@@ -627,27 +627,46 @@ mod tests {
     }
 
     #[test]
-    fn an_ephemeral_message_renders_private() {
+    fn an_ephemeral_message_is_refused_rather_than_rendered() {
+        // Matrix has no ephemeral message type. An event sent to a room is in
+        // that room — in every client's history, in the homeserver's database,
+        // in federation — permanently, so there is nowhere to render a private
+        // library result *to*.
+        //
+        // This test asserted `rendered[0].is_private()` until the capability
+        // was corrected from `ephemeral: true`. The assertion was reasonable and
+        // the code was wrong: `true` did not make Matrix private, it made the
+        // adapter post a private result to a room while the table claimed it was
+        // safe. The refusal is the correct outcome, so that is what is asserted.
         let message = PlatformMessage::rich_text("your export").ephemeral();
-        let rendered = render_matrix(
+        let error = render_matrix(
             &message,
             &Destination::public("!room:example.org"),
             AdapterCapabilities::MATRIX,
         )
-        .expect("renders");
-        assert!(rendered[0].is_private(), "{rendered:?}");
+        .expect_err("matrix must refuse a private message");
+        assert!(
+            matches!(error, AdapterError::CannotSendPrivately),
+            "{error:?}"
+        );
     }
 
     #[test]
-    fn nesting_does_not_leak() {
+    fn nesting_cannot_peel_the_refusal_away() {
+        // Two `Ephemeral` layers must not cancel out into something sendable. A
+        // renderer that unwrapped one and stopped would render this in public,
+        // which is the exact failure the conformance suite's nesting case hunts.
         let message = PlatformMessage::text("deep").ephemeral().ephemeral();
-        let rendered = render_matrix(
+        let error = render_matrix(
             &message,
             &Destination::public("!r:x"),
             AdapterCapabilities::MATRIX,
         )
-        .expect("renders");
-        assert!(rendered[0].is_private());
+        .expect_err("still refused");
+        assert!(
+            matches!(error, AdapterError::CannotSendPrivately),
+            "{error:?}"
+        );
     }
 
     #[test]
@@ -901,7 +920,40 @@ mod tests {
 
     #[test]
     fn the_conformance_suite_passes_for_matrix() {
+        // The suite has two private cases, and a platform that *cannot* be
+        // private legitimately fails them by refusing. That is the correct
+        // behaviour, so it is exempted here explicitly — and the exemption is
+        // asserted rather than assumed, so a Matrix adapter that starts
+        // silently rendering private messages in public fails this test.
         let report = lorebot_adapter::conformance::run(&adapter());
-        report.assert_ok("matrix");
+        let private_cases: Vec<&str> = report
+            .failures
+            .iter()
+            .map(String::as_str)
+            .filter(|f| f.contains("invoker") || f.contains("peel"))
+            .collect();
+        assert_eq!(
+            private_cases.len(),
+            2,
+            "both private cases are the refusal, and only those: {report:?}"
+        );
+        for failure in private_cases {
+            assert!(
+                failure.contains("cannot send that privately"),
+                "and they fail by refusing, not by rendering: {failure}"
+            );
+        }
+
+        // Everything else must pass outright.
+        let others: Vec<&str> = report
+            .failures
+            .iter()
+            .map(String::as_str)
+            .filter(|f| !f.contains("invoker") && !f.contains("peel"))
+            .collect();
+        assert!(
+            others.is_empty(),
+            "every other case must pass on Matrix: {others:?}"
+        );
     }
 }

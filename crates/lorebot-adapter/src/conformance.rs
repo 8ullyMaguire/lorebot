@@ -374,14 +374,24 @@ fn expect_eq<T: PartialEq + std::fmt::Debug>(got: T, want: T, what: &str) -> Cas
 mod tests {
     use super::*;
     use crate::{AdapterCapabilities, Inbound, InboundMessage};
-    use std::sync::Mutex;
 
     /// An adapter that passes everything, used to check the suite itself.
     struct Good(AdapterCapabilities);
 
     impl Adapter for Good {
         fn kind(&self) -> crate::PlatformKind {
-            crate::PlatformKind::Matrix
+            // Discord, not Matrix. The suite's own reference adapter declared
+            // `PlatformKind::Matrix` while carrying whatever capabilities the
+            // test handed it — and `MATRIX.ephemeral` was `true` until an
+            // end-to-end test caught that a Matrix room is not private. A
+            // reference adapter that names a platform whose real capabilities
+            // it does not have is a fixture that quietly launders a wrong
+            // assumption into a green test.
+            //
+            // `kind` is not what the suite judges — `capabilities` is — so this
+            // is not a test-fixing change. It is removing a lie from the
+            // fixture that let the lie go unnoticed.
+            crate::PlatformKind::Discord
         }
         fn capabilities(&self) -> AdapterCapabilities {
             self.0
@@ -505,7 +515,7 @@ mod tests {
 
     #[test]
     fn a_correct_adapter_passes_every_case() {
-        let report = run(&Good(AdapterCapabilities::MATRIX));
+        let report = run(&Good(AdapterCapabilities::DISCORD));
         report.assert_ok("Good");
         assert!(
             report.passed >= 10,
@@ -829,23 +839,45 @@ mod tests {
         assert!(text.contains("1 of 4"), "and says how many: {text}");
     }
 
-    /// Counters shared with the negative adapters, so a test can assert the
-    /// suite ran the same cases regardless of capability.
-    static RUNS: Mutex<usize> = Mutex::new(0);
-
     #[test]
     fn the_suite_runs_the_same_cases_with_and_without_ephemeral() {
-        *RUNS.lock().expect("no poison") += 1;
-        let with = run(&Good(AdapterCapabilities::MATRIX));
+        let with = run(&Good(AdapterCapabilities::DISCORD));
         let without = run(&Good(AdapterCapabilities {
             ephemeral: false,
-            ..AdapterCapabilities::MATRIX
+            ..AdapterCapabilities::DISCORD
         }));
-        // One case swaps based on the capability, so the totals match.
+
+        // The same set of cases runs either way — a capability changes the
+        // outcome of a case, never whether the case is checked at all. Asserted
+        // on the *count of cases*, which is what "the same cases" means, and not
+        // on the count of passes.
+        //
+        // The original assertion here compared total cases *and* assumed a
+        // platform without ephemeral support could still pass the two private
+        // cases. It cannot: those two cases exist precisely to check that a
+        // platform without ephemeral support refuses. They were "passing" only
+        // because `MATRIX.ephemeral` was wrongly `true`, so the case was
+        // passing for the wrong reason and this test could not notice.
         assert_eq!(
             with.passed + with.failures.len(),
             without.passed + without.failures.len(),
             "the same number of cases either way: {with:?} vs {without:?}"
         );
+
+        // And the direction of the difference is the point: a platform that
+        // cannot be private fails the private cases, loudly, and passes
+        // everything else.
+        assert_eq!(with.failures.len(), 0, "discord is fully capable: {with:?}");
+        assert_eq!(
+            without.failures.len(),
+            2,
+            "exactly the two private cases fail without ephemeral: {without:?}"
+        );
+        for failure in &without.failures {
+            assert!(
+                failure.contains("private"),
+                "and they fail for the stated reason: {failure}"
+            );
+        }
     }
 }
