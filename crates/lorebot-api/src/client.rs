@@ -275,7 +275,7 @@ impl LorehavenClient {
             reqwest::Method::POST,
             "imports",
             Some(serde_json::to_value(request)?),
-            Some(&credential),
+            Some(credential),
         )
         .await
     }
@@ -292,7 +292,7 @@ impl LorehavenClient {
     /// [`ApiError::Envelope`].
     pub async fn job_status(&self) -> Result<JobList> {
         let credential = self.require(Scope::ContentWrite)?;
-        self.send_with(reqwest::Method::GET, "jobs", None, Some(&credential))
+        self.send_with(reqwest::Method::GET, "jobs", None, Some(credential))
             .await
     }
 
@@ -312,7 +312,7 @@ impl LorehavenClient {
             reqwest::Method::POST,
             "exports",
             Some(serde_json::to_value(request)?),
-            Some(&credential),
+            Some(credential),
         )
         .await
     }
@@ -333,7 +333,7 @@ impl LorehavenClient {
             reqwest::Method::POST,
             "bookmarks",
             Some(serde_json::to_value(request)?),
-            Some(&credential),
+            Some(credential),
         )
         .await
     }
@@ -357,7 +357,7 @@ impl LorehavenClient {
             reqwest::Method::POST,
             &format!("works/{}/kudos", encode(work_id)),
             Some(serde_json::json!({})),
-            Some(&credential),
+            Some(credential),
         )
         .await
     }
