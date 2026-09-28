@@ -118,9 +118,9 @@ async fn the_instance_is_reachable_and_the_token_is_valid() {
 }
 
 #[tokio::test]
-async fn whoami_renders_privately_with_the_instance_name() {
+async fn status_renders_privately_with_the_scopes_the_server_reports() {
     let (Some(url), Some(token)) = (instance_url(), std::env::var("LOREBOT_E2E_TOKEN").ok()) else {
-        skip("whoami");
+        skip("status");
         return;
     };
     let dispatcher = dispatcher(&token).await;
@@ -128,18 +128,26 @@ async fn whoami_renders_privately_with_the_instance_name() {
     // `handle` returns messages, never a `Result`: an API failure is turned
     // into something the reader can act on, and a bot that returns `Err` here
     // would push that decision to every adapter.
-    let replies = dispatcher.handle(inbound("/whoami")).await;
+    let replies = dispatcher.handle(inbound("/status")).await;
 
     assert_eq!(replies.len(), 1, "one reply: {replies:?}");
     assert!(
         replies[0].is_private(),
-        "/whoami reveals the instance, so it is private: {:?}",
+        "/status reports the link, so it is private: {:?}",
         replies[0]
     );
+    // It reports the scopes the *server* says, not the set cached at link time.
+    // That is the property `GET /me/credential` was added for, and it is why
+    // this is worth running against a real instance rather than a wiremock.
     let text = flatten(&replies[0]);
     assert!(
-        text.contains("api/v1") || text.contains("e2e"),
-        "the url: {text:?}"
+        text.contains("content.read") || text.contains("library.read"),
+        "the server's scopes: {text:?}"
+    );
+    assert!(
+        text.contains("as Lorehaven reports"),
+        "and says where the answer came from, so a reader can tell a live check \\
+         from a cached one: {text:?}"
     );
 }
 

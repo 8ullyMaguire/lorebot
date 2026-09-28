@@ -408,13 +408,18 @@ async fn verifying_a_link_reports_the_servers_scopes_not_the_cached_ones() {
     // the bot trusted its cached set it would keep refusing locally for a
     // permission the token now has.
     let base = server().await;
+    // `/me/credential`, not `/me/tokens`. The latter is session-only: it
+    // answers a bearer token with "sign in to list tokens", so a bot could
+    // never call it. This test mocked the *wrong* endpoint, which is how the
+    // bug survived the unit suite and was found by the end-to-end run against
+    // a real instance.
     Mock::given(method("GET"))
-        .and(path("/api/v1/me/tokens"))
+        .and(path("/api/v1/me/credential"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "tokens": [
-                {"id": "tok-9", "name": "lorebot", "kind": "bot",
-                 "scopes": "content.read content.write library.read"}
-            ]
+            "account_id": "acct-1",
+            "pseud_id": "pseud-1",
+            "via": "token",
+            "scopes": ["content.read", "content.write", "library.read"],
         })))
         .expect(1)
         .mount(&base)
@@ -426,6 +431,95 @@ async fn verifying_a_link_reports_the_servers_scopes_not_the_cached_ones() {
     assert!(
         scopes.allows(Scope::ContentWrite),
         "the server is the authority: {scopes}"
+    );
+}
+
+#[tokio::test]
+async fn verifying_a_link_does_not_call_the_session_only_token_list() {
+    // The regression, pinned. `/me/tokens` needs a session; a bot has a bearer
+    // token and no cookie jar, so calling it makes every link unverifiable and
+    // silently falls back to the cached scopes.
+    let base = server().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/me/credential"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "account_id": "acct-1", "pseud_id": "pseud-1", "via": "token",
+            "scopes": ["content.read"],
+        })))
+        .expect(1)
+        .mount(&base)
+        .await;
+    // If the client calls this, wiremock's `verify()` below fails the test.
+    Mock::given(method("GET"))
+        .and(path("/api/v1/me/tokens"))
+        .respond_with(ResponseTemplate::new(422).set_body_json(serde_json::json!({
+            "error": {"code": "VALIDATION_FAILED", "message": "sign in to list tokens"}
+        })))
+        .expect(0)
+        .mount(&base)
+        .await;
+
+    let client = client_with(&base, "lh-secret", "content.read");
+    client
+        .verify_credential()
+        .await
+        .expect("verifies via /me/credential");
+    base.verify().await;
+}
+
+#[tokio::test]
+async fn a_token_with_no_scopes_reports_none_rather_than_the_cached_set() {
+    // A reader who re-linked with nothing granted, or who had their scopes
+    // withdrawn, must be refused. Falling back to the cached set would leave the
+    // bot using authority the server has withdrawn — the one outcome worse than
+    // a refusal, because it is invisible.
+    let base = server().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/me/credential"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "account_id": "acct-1", "pseud_id": "pseud-1", "via": "token",
+            "scopes": [],
+        })))
+        .expect(1)
+        .mount(&base)
+        .await;
+
+    // Cached scopes are broad, on purpose.
+    let client = client_with(
+        &base,
+        "lh-secret",
+        "content.read library.read content.write",
+    );
+    let scopes = client.verify_credential().await.expect("verifies");
+    assert!(
+        !scopes.allows(Scope::ContentRead),
+        "the server withdrew everything: {scopes}"
+    );
+    assert!(!scopes.allows(Scope::ContentWrite));
+}
+
+#[tokio::test]
+async fn a_sessions_empty_scope_list_is_not_read_as_a_revocation() {
+    // A session carries no scope set — its authority was settled at login. An
+    // empty list there means "not applicable", not "granted nothing", and a
+    // caller that confuses the two locks a signed-in user out of their own
+    // account.
+    let base = server().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/me/credential"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "account_id": "acct-1", "pseud_id": "pseud-1", "via": "session",
+            "scopes": [],
+        })))
+        .expect(1)
+        .mount(&base)
+        .await;
+
+    let client = client_with(&base, "lh-secret", "content.read");
+    let scopes = client.verify_credential().await.expect("verifies");
+    assert!(
+        scopes.allows(Scope::ContentRead),
+        "a session's empty list falls back to the cached set: {scopes}"
     );
 }
 

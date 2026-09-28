@@ -471,15 +471,37 @@ impl LorehavenClient {
                 needed: "a linked account".into(),
                 granted: "none — this client has no token".into(),
             })?;
-        let tokens = self.list_tokens().await?;
-        // The scopes the *server* reports are the authority, not the ones the
-        // bot cached at link time: a reader can re-link with different scopes
-        // from Lorehaven's own UI, and the bot would otherwise keep using the
-        // stale set and refuse locally for no reason.
-        Ok(tokens
-            .first()
-            .map(|t| ScopeSet::parse(&t.scopes))
-            .unwrap_or_else(|| credential.scopes().clone()))
+        let body: CredentialDescription = self
+            .send_with(
+                reqwest::Method::GET,
+                "/me/credential",
+                None,
+                Some(credential),
+            )
+            .await?;
+
+        // An empty scope list means two different things depending on the
+        // credential, and conflating them is how a bot either uses withdrawn
+        // authority or locks out a signed-in user.
+        //
+        // **A token** with an empty list was granted nothing, or had its scopes
+        // withdrawn. That is a real answer and it is authoritative: falling back
+        // to the cached set would leave the bot using authority the server has
+        // taken away, which is the one outcome worse than a refusal because it
+        // is invisible.
+        //
+        // **A session** has no scope set at all — its authority was settled at
+        // login, so there is nothing to report. Reading that as "granted
+        // nothing" would make every signed-in user unable to do anything.
+        // So it falls back to the cached set, which for a session is the
+        // placeholder the client was constructed with.
+        if body.via == "token" {
+            return Ok(ScopeSet::parse(&body.scopes.join(" ")));
+        }
+        if body.scopes.is_empty() {
+            return Ok(credential.scopes().clone());
+        }
+        Ok(ScopeSet::parse(&body.scopes.join(" ")))
     }
 
     // -----------------------------------------------------------------------
@@ -795,4 +817,29 @@ mod tests {
         let client = LorehavenClient::new(config).expect("builds");
         assert!(client.scopes().is_some_and(|s| s.known().is_empty()));
     }
+}
+
+/// `GET /me/credential` — the caller's own identity and scopes.
+///
+/// A new type rather than reusing `TokenView`, because the shapes are
+/// different in a way that matters: this is the *authenticated caller's*
+/// credential, so it has no `id`, no `name`, no `token_hash` and no timestamps.
+/// Reusing `TokenView` would have made the two interchangeable in the type
+/// system and invited a future refactor to read a token's metadata off a
+/// response that describes the caller's authority instead.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct CredentialDescription {
+    /// The account this credential acts for.
+    pub account_id: String,
+    /// The pseud it acts as.
+    pub pseud_id: String,
+    /// `"token"` or `"session"`.
+    ///
+    /// Distinguishes an empty scope list that means *granted nothing* from one
+    /// that means *a session has no scope set* — a session's authority was
+    /// settled at login, so its scopes are empty for a different reason and
+    /// must not be read as a revocation.
+    pub via: String,
+    /// The scopes the server reports, space-separated on the wire as an array.
+    pub scopes: Vec<String>,
 }
