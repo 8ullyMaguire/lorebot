@@ -95,7 +95,31 @@ impl ScopeSet {
     pub fn parse(raw: &str) -> Self {
         let mut known = Vec::new();
         let mut unknown = Vec::new();
-        for part in raw.split_whitespace() {
+        // Split on COMMA **and** whitespace, not whitespace alone.
+        //
+        // This was `raw.split_whitespace()`, which is self-consistent with
+        // `to_wire` (which joins with a space) and therefore invisible to any
+        // test written against that pair — which is why 252 tests passed while
+        // every real action was refused.
+        //
+        // Lorehaven's `GET /me/credential` returns scopes as a JSON array, and
+        // `external.rs` joins them with ", ", so a link seeded from what the
+        // server actually reports is `"content.read,library.read"`. Split on
+        // whitespace alone yields ONE part, which `Scope::parse` does not
+        // recognise, so it lands in `unknown` and `allows()` is false for every
+        // scope. `describe()` renders `unknown` too, so the bot *looked* like it
+        // held the right scopes while refusing everything — and `/status`
+        // reported "Lorehaven could not be reached", a misdiagnosis, because
+        // Lorehaven was reachable and had answered.
+        //
+        // Both separators are accepted because both occur and neither is going
+        // away: comma is what the server sends, space is what `to_wire` emits on
+        // the way out. Splitting on both and discarding empties covers comma,
+        // comma-space, bare space, and the empty string.
+        for part in raw
+            .split(|c: char| c == ',' || c.is_whitespace())
+            .filter(|p| !p.is_empty())
+        {
             match Scope::parse(part) {
                 Some(scope) => known.push(scope),
                 None => unknown.push(part.to_owned()),
