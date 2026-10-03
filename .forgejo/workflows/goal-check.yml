@@ -1,0 +1,46 @@
+name: goal-check
+
+# Runs the repository's definition of done -- docs/goal-check.py -- on every push
+# and pull request.
+#
+# The predicate is strictly stronger than `cargo test`: it also fails when any crate
+# has no tests at all, which `cargo test` cannot see. lorebot has seven crates and
+# four of them -- including all three platform adapters -- report zero tests while
+# cargo still exits 0. That clause is the reason this file exists.
+#
+# No database is needed.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  goal-check:
+    runs-on: docker
+    steps:
+      - name: Check out
+        uses: https://git.polarisocial.xyz/forgejo/forgejo-actions-checkout@v4
+
+      - name: Set up Rust
+        uses: https://git.polarisocial.xyz/forgejo/forgejo-actions-setup-rust@v1
+        with:
+          rust-version: stable
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: https://git.polarisocial.xyz/forgejo/forgejo-actions-cache@v4
+        with:
+          key: cargo-${{ hashFiles('Cargo.lock') }}
+
+      - name: Run the goal-check predicate
+        env:
+          CI: "true"
+          # The clippy clause runs `rustup run <toolchain> cargo clippy` with a
+          # toolchain-specific CARGO_TARGET_DIR, because the two toolchains on this
+          # project do not match: rust-toolchain.toml pins 1.82 while the
+          # distribution's clippy-driver is a different version, and the mismatch
+          # surfaces as a dependency being blamed for needing a newer rustc. The
+          # predicate picks the toolchain itself and reports which pair it used, so
+          # nothing needs to be pinned here.
+        run: python3 docs/goal-check.py
