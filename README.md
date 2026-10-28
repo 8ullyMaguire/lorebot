@@ -143,3 +143,24 @@ Every adapter must pass it, and it earns its keep: it caught Telegram silently
 discarding every action row while advertising `buttons: true`, Matrix emitting
 buttons it had declared it did not support, and a Discord mention stripper that
 deleted *other people's* mentions from a reader's sentence.
+
+## Stack and language policy
+
+What this repo is: a Rust workspace (edition 2021, rust-version 1.82) of
+`crates/*` — core, typed API client, adapter trait, one crate per platform —
+with `reqwest` as its only way out. No database, no server, no front end, no
+storage of its own; that is enforced by tests, not by convention.
+
+The estate default for new work is an axum + Postgres core, a SvelteKit front
+end, the shared design tokens for anything that draws a UI, and contracts
+between services — work-manifest v1, OpenAPI, RSS/ActivityPub — instead of a
+shared database. Services read each other's published contracts; they do not
+read each other's tables.
+
+This repo is the default in the part of the policy that binds it hardest: it
+talks to Darkhold through the published API and holds no tables, which is the
+contract rule taken to its limit. The axum, Postgres, SvelteKit and design
+token halves do not apply, because there is nothing here to serve or draw.
+
+The rules that apply to every repo in the estate are in
+`10-Projects/estate-master-prompt.md` in the secondbrain vault.
