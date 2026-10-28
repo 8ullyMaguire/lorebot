@@ -3,8 +3,8 @@
 One page per platform, saying what each one can do, what it deliberately cannot,
 and what each of those decisions costs. Read this before adding a fourth.
 
-The shared contract is in `lorebot-adapter/src/lib.rs`. The conformance suite
-that every adapter must pass is in `lorebot-adapter/src/conformance.rs`, and
+The shared contract is in `darkbot-adapter/src/lib.rs`. The conformance suite
+that every adapter must pass is in `darkbot-adapter/src/conformance.rs`, and
 `Adapter::capabilities()` is the single declaration of what a platform can do —
 a renderer that contradicts it fails the suite.
 
@@ -43,7 +43,7 @@ message and says so — see `docs/PRIVACY.md`.
 
 **The one that matters:** ephemeral replies are a `flags: 64` on a single
 message. Discord does not put it in the channel, does not show it to anyone but
-the recipient, and does not fire a message-create event for it. Lorehaven still
+the recipient, and does not fire a message-create event for it. Darkhold still
 cannot know where it went, but the reader's private library result is now
 subject to Discord's storage policy rather than the bot's good behaviour.
 
@@ -57,7 +57,7 @@ changing `on_payload`.
 ## Telegram
 
 **Long polling**, not a webhook. A webhook needs a public HTTPS URL and a
-certificate; a bot for a self-hosted Lorehaven usually has neither, and long
+certificate; a bot for a self-hosted Darkhold usually has neither, and long
 polling works on a laptop. `getUpdates` with an offset is exactly one HTTP call
 in a loop, and the loop is the whole transport.
 
@@ -83,7 +83,7 @@ adapter returns `AdapterError::CannotSendPrivately` and the binary tells the
 reader why, rather than posting a private library result to a room.
 
 **HTML escaping before Markdown conversion.** A work's title comes from
-Lorehaven, so from a user, and `formatted_body` is HTML. An unescaped title is
+Darkhold, so from a user, and `formatted_body` is HTML. An unescaped title is
 stored XSS in every client's event history. The order matters and is asserted:
 escape the source, *then* apply the four Markdown patterns, because the reverse
 order re-introduces raw angle brackets.
@@ -94,8 +94,8 @@ absence of a message.
 
 ## Adding a platform
 
-1. A new crate `crates/lorebot-<name>`. **No database driver** — the assertion
-   in `lorebot-core/src/lib.rs` and `scripts/prove-db-assertion.sh` will fail
+1. A new crate `crates/darkbot-<name>`. **No database driver** — the assertion
+   in `darkbot-core/src/lib.rs` and `scripts/prove-db-assertion.sh` will fail
    the build.
 2. `impl Adapter`: `kind`, `capabilities`, `parse`, `render`, `send`.
 3. `run(&adapter).assert_ok("<name>")` in your tests. It will find things.

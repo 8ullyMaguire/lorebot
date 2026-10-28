@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-goal-check.py -- the completion predicate for lorebot.
+goal-check.py -- the completion predicate for darkbot.
 
-    cd ~/code-local/rust/lorebot && python3 docs/goal-check.py
+    cd ~/code-local/rust/darkbot && python3 docs/goal-check.py
 
 Exit 0  -> the goal is COMPLETE.
 Exit 1  -> work remains; stdout names the clause.
@@ -11,18 +11,18 @@ Exit 2  -> CANNOT CLAIM COMPLETE; a clause could not be evaluated.
 ## Why this file exists
 
 Fourth project in the estate to get one (polaris 9f855ef, kindred fb681c2,
-threadlight). lorebot's suite is GREEN -- 173 tests measured 2026-10-05 -- and there
+threadlight). darkbot's suite is GREEN -- 173 tests measured 2026-10-05 -- and there
 is no way to say so that a later change cannot quietly invalidate it.
 
 ## This project's actual gap, which the clause names
 
 `cargo test` reports 173 passing tests and **four suites reporting 0**:
 
-    unittests src/lib.rs (lorebot-discord)   test result: ok. 0 passed
-    unittests src/lib.rs (lorebot-matrix)    test result: ok. 0 passed
-    unittests src/lib.rs (lorebot-telegram)  test result: ok. 0 passed
+    unittests src/lib.rs (darkbot-discord)   test result: ok. 0 passed
+    unittests src/lib.rs (darkbot-matrix)    test result: ok. 0 passed
+    unittests src/lib.rs (darkbot-telegram)  test result: ok. 0 passed
 
-Those are the three platform adapters. lorebot is a bot that talks to Discord,
+Those are the three platform adapters. darkbot is a bot that talks to Discord,
 Matrix and Telegram, so **the code that talks to the platforms is untested** while
 the code that routes and parses is tested thoroughly (23 in `client.rs` alone). A
 reader would see "173 tests" and reasonably conclude the bot is covered.
@@ -64,7 +64,7 @@ code, which is the silent-no-match failure in its purest form.
     rustup pair with a toolchain-specific target dir, and names the pair in its
     output. A check that cannot say what it ran is not trustworthy.
 
-No database is involved: lorebot's suite needs no external service, which is worth
+No database is involved: darkbot's suite needs no external service, which is worth
 recording because it is the one in-scope project where step 1 of the standard plan
 (no infrastructure clause) genuinely does not apply.
 """
@@ -250,7 +250,7 @@ def clause_suite():
 def clause_every_crate_tested():
     """Every crate must contain at least one real test.
 
-    This is the clause that makes "lorebot is covered" falsifiable. Enumerated, not
+    This is the clause that makes "darkbot is covered" falsifiable. Enumerated, not
     counted: a count would say "3 crates untested" and leave the reader to find them.
 
     A crate counts as tested when any `#[test]`, `#[tokio::test]`, `#[bench]` or

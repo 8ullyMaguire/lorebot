@@ -4,7 +4,7 @@ name: goal-check
 # and pull request.
 #
 # The predicate is strictly stronger than `cargo test`: it also fails when any crate
-# has no tests at all, which `cargo test` cannot see. lorebot has seven crates and
+# has no tests at all, which `cargo test` cannot see. darkbot has seven crates and
 # four of them -- including all three platform adapters -- report zero tests while
 # cargo still exits 0. That clause is the reason this file exists.
 #

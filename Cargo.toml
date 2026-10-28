@@ -5,7 +5,7 @@ resolver = "2"
 # a forgotten entry is a crate that silently never builds.
 members = ["crates/*"]
 
-# Matching Lorehaven's floor, so one toolchain builds both. Pinned in the
+# Matching Darkhold's floor, so one toolchain builds both. Pinned in the
 # workspace rather than per crate so a crate cannot quietly require more.
 [workspace.package]
 version = "0.1.0"

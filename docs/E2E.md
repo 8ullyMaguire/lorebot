@@ -1,35 +1,35 @@
-# Running against a real Lorehaven
+# Running against a real Darkhold
 
-The wiremock suite proves lorebot agrees with itself. It cannot prove lorebot
-agrees with Lorehaven, and in the first end-to-end run it did not.
+The wiremock suite proves darkbot agrees with itself. It cannot prove darkbot
+agrees with Darkhold, and in the first end-to-end run it did not.
 
 ```sh
 # terminal 1
-cd ~/code-local/rust/lorehaven
+cd ~/code-local/rust/darkhold
 cargo run -- serve                     # 127.0.0.1:8080
 
 # terminal 2 — seed a reader and issue a bot token
-cd ~/code-local/rust/lorehaven && cargo run -- seed -- development
+cd ~/code-local/rust/darkhold && cargo run -- seed -- development
 curl -c /tmp/lh.jar -X POST http://127.0.0.1:8080/api/v1/auth/login \
   -H 'content-type: application/json' \
-  -d '{"email":"dev@lorehaven.local","password":"lorehaven-dev"}'
+  -d '{"email":"dev@darkhold.local","password":"darkhold-dev"}'
 curl -b /tmp/lh.jar -X POST http://127.0.0.1:8080/api/v1/me/tokens \
   -H 'content-type: application/json' -d '{
-    "name": "lorebot-e2e", "kind": "bot",
+    "name": "darkbot-e2e", "kind": "bot",
     "scopes": ["content.read", "library.read"],
     "acting_pseud_id": "<a pseud id from GET /api/v1/pseuds>",
     "expires_in_seconds": 86400
   }'
 
 # terminal 3
-export LOREBOT_E2E_URL=http://127.0.0.1:8080/api/v1
-export LOREBOT_E2E_TOKEN=...            # the token from above
-export LOREBOT_E2E_SCOPES='content.read library.read'
-export LOREBOT_E2E_INSTANCE=lorehaven
-cd ~/code-local/rust/lorebot && cargo test -p lorebot --test e2e -- --nocapture
+export DARKBOT_E2E_URL=http://127.0.0.1:8080/api/v1
+export DARKBOT_E2E_TOKEN=...            # the token from above
+export DARKBOT_E2E_SCOPES='content.read library.read'
+export DARKBOT_E2E_INSTANCE=darkhold
+cd ~/code-local/rust/darkbot && cargo test -p darkbot --test e2e -- --nocapture
 ```
 
-With no `LOREBOT_E2E_URL` the network tests skip and the offline properties
+With no `DARKBOT_E2E_URL` the network tests skip and the offline properties
 still run — those are the ones that catch render and privacy bugs, and they need
 no instance.
 
@@ -40,18 +40,18 @@ recorded because each one is a class of bug worth recognising.
 
 ### 1. `verify_credential` called a session-only endpoint
 
-`LorehavenClient::verify_credential` called `GET /me/tokens`. That route is
-session-only: a bot has a bearer token and no cookie jar, so Lorehaven answers
+`DarkholdClient::verify_credential` called `GET /me/tokens`. That route is
+session-only: a bot has a bearer token and no cookie jar, so Darkhold answers
 `422 "sign in to list tokens"`. Every link was therefore unverifiable, and the
 bot fell back to the scopes cached at link time — which go stale the moment a
-reader re-links from Lorehaven's own UI.
+reader re-links from Darkhold's own UI.
 
 The wiremock test mocked the wrong endpoint, so it agreed with the wrong client.
 **A mock answers whatever the code asks for, which is the one thing a mock
 cannot check.**
 
-Fixed on both sides: Lorehaven gained `GET /me/credential` (bearer-authenticated,
-returns the caller's own scopes and nothing else), and lorebot calls that.
+Fixed on both sides: Darkhold gained `GET /me/credential` (bearer-authenticated,
+returns the caller's own scopes and nothing else), and darkbot calls that.
 
 The response distinguishes `via: "token"` from `via: "session"`, because an
 empty scope list means *granted nothing* for a token and *not applicable* for a
@@ -69,7 +69,7 @@ catalogue stopped at 0073 while 0074–0083 sat on disk.
 file inside a directory does not change it. So the build script ran once, was
 permanently satisfied, and never re-ran.
 
-Nothing in Lorehaven's suite noticed, because every test builds its database
+Nothing in Darkhold's suite noticed, because every test builds its database
 from the same stale catalogue — a stale catalogue produces a *consistent* wrong
 schema, and consistency is what the tests were checking. Only comparing the
 catalogue against the filesystem catches it. `crates/db/tests/migration_catalogue.rs`
@@ -95,7 +95,7 @@ compiled.
 that the fix is to pass `acting_pseud_id`, which is a confusing first-run
 failure for anyone following the README.
 
-Worth fixing in Lorehaven's error, and the reason to document the field here.
+Worth fixing in Darkhold's error, and the reason to document the field here.
 
 ## What the suite does *not* cover
 
