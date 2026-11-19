@@ -85,6 +85,12 @@ impl DiscordAdapter {
         })
     }
 
+    /// Discord's authorization header. A bot token is not a bearer token: sending `Bearer ...` to
+    /// `gateway/bot` returns 401, which the gateway reader mistook for "no url".
+    pub fn authorization_header(&self) -> String {
+        format!("Bot {}", self.token)
+    }
+
     /// The bot's user id, once READY has arrived.
     pub fn user_id(&self) -> String {
         self.user_id.lock().expect("no poison").clone()
@@ -106,7 +112,7 @@ impl DiscordAdapter {
         let response = self
             .http
             .get(format!("{API}/gateway/bot"))
-            .bearer_auth(&self.token)
+            .header("Authorization", self.authorization_header())
             .send()
             .await
             .map_err(|e| AdapterError::Transport {
@@ -141,11 +147,22 @@ impl DiscordAdapter {
     /// intents that Discord surfaces to an administrator, so the set is
     /// asserted in a test rather than left to a reader's judgement.
     pub fn identify(&self) -> Value {
+        self.identify_with_intents(true)
+    }
+
+    /// `message_content` is opt-in: Discord rejects the identify frame with close code 4014 when the
+    /// application has not enabled that privileged intent in its developer portal.
+    pub fn identify_with_intents(&self, message_content: bool) -> Value {
+        let intents = if message_content {
+            GUILDS | MESSAGE_CONTENT
+        } else {
+            GUILDS
+        };
         json!({
             "op": OPCODE_IDENTIFY,
             "d": {
                 "token": self.token,
-                "intents": GUILDS | MESSAGE_CONTENT,
+                "intents": intents,
                 "properties": {
                     "os": std::env::consts::OS,
                     "browser": "darkbot",
@@ -235,7 +252,7 @@ impl DiscordAdapter {
         let response = self
             .http
             .post(format!("{API}/channels/{channel}/messages"))
-            .bearer_auth(&self.token)
+            .header("Authorization", self.authorization_header())
             .json(&body)
             .send()
             .await

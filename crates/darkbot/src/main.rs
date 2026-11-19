@@ -31,6 +31,8 @@ use std::sync::Arc;
 use darkbot_core::config::{BotConfig, Platform};
 use darkbot_core::dispatch::Dispatcher;
 use darkbot_core::store::TokenStore;
+use futures_util::{SinkExt, StreamExt};
+use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 /// The platforms that are running, so `main` can await them together.
 struct Running {
@@ -224,32 +226,100 @@ fn spawn_discord(
         name: "discord",
         handle: tokio::spawn(async move {
             loop {
-                match adapter.gateway().await {
-                    Ok((url, heartbeat)) => {
-                        tracing::info!(url = %url, heartbeat_ms = heartbeat, "discord gateway");
-                    }
+                let (url, heartbeat_ms) = match adapter.gateway().await {
+                    Ok(value) => value,
                     Err(error) => {
-                        // A gateway fetch that fails is usually Discord being
-                        // briefly unavailable. Retried, not fatal: this is a
-                        // companion bot, and a restart on every blip makes an
-                        // outage look like a crash loop.
                         tracing::warn!(error = %error, "discord gateway unavailable, retrying");
                         tokio::time::sleep(std::time::Duration::from_secs(30)).await;
                         continue;
                     }
+                };
+                tracing::info!(url = %url, heartbeat_ms = heartbeat_ms, "discord gateway");
+
+                let socket = match tokio_tungstenite::connect_async(&url).await {
+                    Ok((socket, _)) => socket,
+                    Err(error) => {
+                        tracing::warn!(error = %error, "discord gateway connect failed, retrying");
+                        tokio::time::sleep(poll).await;
+                        continue;
+                    }
+                };
+                let (mut write, mut read) = socket.split();
+                let message_content = std::env::var("DARKBOT_DISCORD_MESSAGE_CONTENT")
+                    .map(|value| value == "1")
+                    .unwrap_or(false);
+                if let Err(error) = write
+                    .send(WsMessage::Text(
+                        adapter
+                            .identify_with_intents(message_content)
+                            .to_string()
+                            .into(),
+                    ))
+                    .await
+                {
+                    tracing::warn!(error = %error, "discord identify failed, retrying");
+                    tokio::time::sleep(poll).await;
+                    continue;
                 }
 
-                // The bot's own id arrives on the gateway's READY frame, not from
-                // a REST call — so there is nothing to fetch here. It is logged
-                // once the socket is wired; see `docs/ADAPTERS.md`.
-                //
-                // The websocket itself (`tungstenite`) is deliberately not a
-                // dependency: a bot for one Darkhold instance does not justify
-                // a websocket stack, and the REST half — which is where every
-                // private message is sent, and the half the privacy guarantee
-                // depends on — is complete and tested.
+                let mut sequence: Option<u64> = None;
+                let mut ticker =
+                    tokio::time::interval(std::time::Duration::from_millis(heartbeat_ms));
+                ticker.tick().await; // consume the immediate first tick
+                loop {
+                    tokio::select! {
+                        _ = ticker.tick() => {
+                            if let Err(error) = write
+                                .send(WsMessage::Text(
+                                    darkbot_discord::DiscordAdapter::heartbeat(sequence).to_string().into(),
+                                ))
+                                .await
+                            {
+                                tracing::warn!(error = %error, "discord heartbeat failed, reconnecting");
+                                break;
+                            }
+                        }
+                        frame = read.next() => match frame {
+                            Some(Ok(WsMessage::Text(text))) => {
+                                let Ok(payload) = serde_json::from_str::<serde_json::Value>(&text) else {
+                                    continue;
+                                };
+                                if let Some(s) = payload.get("s").and_then(serde_json::Value::as_u64) {
+                                    sequence = Some(s);
+                                }
+                                // One parser, one dispatcher. The adapter owns MESSAGE_CREATE and READY;
+                                // this loop only moves the messages it returns into the shared serve path.
+                                let messages = adapter.on_payload(&payload);
+                                if !adapter.user_id().is_empty() && !adapter.application_id().is_empty() {
+                                    tracing::info!(
+                                        bot_id = %adapter.user_id(),
+                                        application_id = %adapter.application_id(),
+                                        "discord ready"
+                                    );
+                                }
+                                for message in messages {
+                                    serve(&dispatcher, &store, &limiter, message, &*adapter).await;
+                                }
+                            }
+                            Some(Ok(WsMessage::Ping(ping))) => {
+                                if write.send(WsMessage::Pong(ping)).await.is_err() {
+                                    break;
+                                }
+                            }
+                            Some(Ok(WsMessage::Close(frame))) => {
+                                tracing::warn!(?frame, "discord gateway closed, reconnecting");
+                                break;
+                            }
+                            None => break,
+                            Some(Err(error)) => {
+                                tracing::warn!(error = %error, "discord gateway frame failed, reconnecting");
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
                 tokio::time::sleep(poll).await;
-                let _ = (&dispatcher, &store, &limiter);
             }
         }),
     }

@@ -22,8 +22,9 @@ serde_json = "1"
 thiserror = "2"
 # `join_all` over the adapter tasks. Not a futures framework: one function, in a
 # binary, to await three JoinHandles without writing the poll loop by hand.
-futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
+futures-util = { version = "0.3", default-features = false, features = ["alloc", "sink", "std"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "sync", "time"] }
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
