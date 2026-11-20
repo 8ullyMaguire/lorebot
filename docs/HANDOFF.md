@@ -12,7 +12,7 @@ M1–M3 of the Discord interactions redesign are implemented. Guild commands are
 
 ## Known issues, in fix order
 
-1. Live endpoint: `/api/discord/interactions` must be exposed publicly and pasted into Developer Portal → General Information → Interactions Endpoint URL. No Discord login is saved in the vault and no local tunnel route was found, so the owner must do the portal step or authorise a host/tunnel route.
+1. Portal URL: retry pasting `https://darkhold.polarisocial.xyz/api/discord/interactions` in Developer Portal → General Information → Interactions Endpoint URL. Endpoint is now deployed and reachable.
 2. M4: no global command registration; owner chose guild-only first.
 
 ## Decisions not to relitigate
@@ -27,3 +27,11 @@ M1–M3 of the Discord interactions redesign are implemented. Guild commands are
 ## Guild registration evidence — 2026-11-20
 
 `darkbot discord-register --guild 1390467506577346782` printed `registered 1 command with 13 subcommand(s)`. A subsequent Discord API GET confirmed `[('darkhold', 13)]`. No token value was printed or stored in the repository.
+
+## Deployment evidence — 2026-11-20
+
+- Built on thinkcentre from `/personal/documents/code/rust/darkbot`, binary at `target/release/darkbot`.
+- Service `darkbot-interactions.service` active, bound to `127.0.0.1:8087`; logs show `discord gateway disabled` and `platforms=["interactions"]`.
+- Nginx exact location proxies `/api/discord/interactions` to that listener; `nginx -t` passed and nginx reloaded.
+- Public unsigned POST returns `401 invalid request signature`, proving the route reaches the verifier rather than darkhold's API 404.
+- The env file's `DARKBOT_DISCORD_PUBLIC_KEY` was stale then briefly empty; corrected from Discord's `/applications/@me` `verify_key`. Comparison now prints `VERIFY_KEY_MATCHES_ENV True`. Values were never printed.
