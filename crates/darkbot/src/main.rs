@@ -624,6 +624,21 @@ async fn register_discord_commands(guild: Option<&str>) -> ExitCode {
 }
 
 async fn serve_interactions() -> ExitCode {
+    let config = match BotConfig::from_env() {
+        Ok(config) => Arc::new(config),
+        Err(error) => {
+            eprintln!("darkbot: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let store = match open_store(&config).await {
+        Ok(store) => store,
+        Err(error) => {
+            eprintln!("darkbot: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let dispatcher = Arc::new(Dispatcher::new(config, store));
     let bind =
         std::env::var("DARKBOT_INTERACTIONS_BIND").unwrap_or_else(|_| "127.0.0.1:8087".to_owned());
     let listener = match tokio::net::TcpListener::bind(&bind).await {
@@ -634,7 +649,7 @@ async fn serve_interactions() -> ExitCode {
         }
     };
     println!("darkbot interactions listening on http://{bind}/discord/interactions");
-    match axum::serve(listener, darkbot::interactions::router()).await {
+    match axum::serve(listener, darkbot::interactions::router(dispatcher)).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("darkbot: interactions server failed: {error}");

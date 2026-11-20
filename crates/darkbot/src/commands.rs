@@ -34,6 +34,8 @@ pub fn definitions() -> Value {
             subcommand("search", "Search public works", vec![required_string("words", "Words to search for")]),
             subcommand("work", "Show one work's metadata", vec![required_string("id", "Work id")]),
             subcommand("kudos", "Thank an author", vec![required_string("id", "Work id")]),
+            subcommand("link", "Link this Discord account to Darkhold", vec![]),
+            subcommand("link_confirm", "Confirm a link with the code from the site", vec![required_string("code", "Code from the site")]),
             subcommand("import", "Start a private import", vec![required_string("url", "Story link")]),
             subcommand("jobs", "Check your import jobs", vec![]),
             subcommand("bookmark", "Bookmark a work", vec![required_string("id", "Work id")]),

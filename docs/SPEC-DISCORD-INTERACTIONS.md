@@ -1,6 +1,6 @@
 # Discord interactions redesign for darkbot
 
-Status: M1 implemented 2026-11-20. M2–M4 planned. Owner decisions recorded 2026-11-20.
+Status: M2 implemented 2026-11-20. M3–M4 planned. Owner decisions recorded 2026-11-20.
 
 ## Problem
 
@@ -16,7 +16,7 @@ Decision: add an interactions transport to darkbot. Do not copy Ascend's 818-lin
 ## Goals
 
 1. Discord users can type real registered slash commands under one root, `/darkhold`.
-2. All current darkbot actions remain reachable: help, search, work, kudos, import, jobs, bookmark, export, status, unlink, privacy.
+2. All current darkbot actions remain reachable: help, search, work, kudos, link, link_confirm, import, jobs, bookmark, export, status, unlink, privacy.
 3. Discord no longer needs MESSAGE_CONTENT. Matrix and Telegram keep their existing gateway command style.
 4. The endpoint refuses unsigned requests before parsing JSON, and is inert when no public key is configured.
 5. Command registration is repeatable from code (`darkbot discord-register [--guild ID]`), with guild-only rollout first.
@@ -60,6 +60,8 @@ One root command, `/darkhold`, with subcommands. All option names are lowercase 
 | jobs | none | `/jobs` |
 | bookmark | `id` (required string) | `/bookmark <id>` |
 | export | `id` (required string) | `/export <id>` |
+| link | none | `/link` |
+| link_confirm | `code` (required string) | `/link_confirm <code>` |
 | status | none | `/status` |
 | unlink | none | `/unlink` |
 | privacy | none | `/privacy` |
@@ -83,7 +85,7 @@ Each row gets a command that can fail:
 3. Wrong-key signature: 401.
 4. Correct PING signature: `{"type":1}`.
 5. Correct `/darkhold help` interaction: response type 4 containing the existing `help_text()` string.
-6. Slash registration dry output: `darkbot discord-register --guild <id>` prints 12 registered command definitions (one root + 11 subcommands in one array, so one command definition with 11 subcommands) and GET confirms the stored names.
+6. Slash registration dry output: `darkbot discord-register --guild <id>` prints 12 registered command definitions (one root + 13 subcommands in one array, so one command definition with 13 subcommands) and GET confirms the stored names.
 7. Live guild proof: after guild registration, a human types `/darkhold help` and sees the reply; then the same for `/darkhold search words:...`.
 8. Regression: MESSAGE_CONTENT remains disabled in the portal and Discord still receives commands.
 9. Matrix/Telegram gateways still start and answer their plain-text commands.
