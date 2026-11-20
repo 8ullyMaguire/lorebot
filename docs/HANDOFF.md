@@ -35,3 +35,7 @@ M1–M3 of the Discord interactions redesign are implemented. Guild commands are
 - Nginx exact location proxies `/api/discord/interactions` to that listener; `nginx -t` passed and nginx reloaded.
 - Public unsigned POST returns `401 invalid request signature`, proving the route reaches the verifier rather than darkhold's API 404.
 - The env file's `DARKBOT_DISCORD_PUBLIC_KEY` was stale then briefly empty; corrected from Discord's `/applications/@me` `verify_key`. Comparison now prints `VERIFY_KEY_MATCHES_ENV True`. Values were never printed.
+
+## Application icon — 2026-11-20
+
+The 1024×1024 PNG uploaded to the Discord application is kept at `docs/assets/darkhold-bot-icon-1024.png` (sha256 `32ee8793d5f41fb50a33b7728420ef2ecbb0c281df6aba118902055df52415c6`). Reuse it when regenerating the portal icon.
