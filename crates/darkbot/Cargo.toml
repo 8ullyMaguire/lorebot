@@ -6,11 +6,19 @@ rust-version.workspace = true
 license.workspace = true
 description = "A thin REST client for your Darkhold instance, on Discord, Telegram and Matrix"
 
+[lib]
+name = "darkbot"
+path = "src/lib.rs"
+
 [[bin]]
 name = "darkbot"
 path = "src/main.rs"
 
 [dependencies]
+axum = "0.8"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+hex = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 darkbot-adapter = { path = "../darkbot-adapter" }
 darkbot-core = { path = "../darkbot-core" }
 darkbot-api = { path = "../darkbot-api" }
@@ -23,10 +31,11 @@ thiserror = "2"
 # `join_all` over the adapter tasks. Not a futures framework: one function, in a
 # binary, to await three JoinHandles without writing the poll loop by hand.
 futures-util = { version = "0.3", default-features = false, features = ["alloc", "sink", "std"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "sync", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
 tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
+tower = { version = "0.5", features = ["util"] }

@@ -1,6 +1,6 @@
 # Discord interactions redesign for darkbot
 
-Status: decided, not implemented. Owner decisions recorded 2026-11-20.
+Status: M1 implemented 2026-11-20. M2–M4 planned. Owner decisions recorded 2026-11-20.
 
 ## Problem
 

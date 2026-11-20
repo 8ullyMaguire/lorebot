@@ -67,15 +67,34 @@ const USAGE: &str = concat!(
     "variable that moved.\n",
 );
 
-/// Handle `--help` and `--version`, and return an exit code when it did.
+/// What the binary was asked to do before any configuration is read.
+enum StartupMode {
+    Run,
+    ServeInteractions,
+    Register(Option<String>),
+    DiscordStatus,
+    Exit(ExitCode),
+}
+
+/// Handle the operator verbs and `--help`/`--version`.
 ///
-/// The bot never read its arguments before the rename and does not start now:
-/// anything unrecognised is warned about and ignored, so a unit file that has
-/// been passing a stray flag keeps starting.
-fn handle_args() -> Option<ExitCode> {
+/// Registration and status need no `BotConfig`, so they run before the normal
+/// startup path. Unknown flags are still warned about and ignored, so a unit
+/// file passing a stray flag keeps starting.
+fn handle_args(args: &[String]) -> StartupMode {
     let mut outcome = None;
-    for arg in std::env::args().skip(1) {
+    for (index, arg) in args.iter().enumerate() {
         match arg.as_str() {
+            "serve-interactions" => return StartupMode::ServeInteractions,
+            "discord-register" => {
+                let guild = args
+                    .iter()
+                    .position(|item| item == "--guild")
+                    .and_then(|at| args.get(at + 1))
+                    .cloned();
+                return StartupMode::Register(guild);
+            }
+            "discord-status" => return StartupMode::DiscordStatus,
             "-h" | "--help" => {
                 print!("{USAGE}");
                 outcome = Some(ExitCode::SUCCESS);
@@ -84,18 +103,25 @@ fn handle_args() -> Option<ExitCode> {
                 println!("darkbot {}", env!("CARGO_PKG_VERSION"));
                 outcome = Some(ExitCode::SUCCESS);
             }
+            "--guild" => {}
+            _ if index > 0 && args.get(index - 1).map(String::as_str) == Some("--guild") => {}
             other => {
                 eprintln!("darkbot: ignoring unknown argument {other:?} (try --help)");
             }
         }
     }
-    outcome
+    outcome.map_or(StartupMode::Run, StartupMode::Exit)
 }
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    if let Some(exit) = handle_args() {
-        return exit;
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match handle_args(&args) {
+        StartupMode::Exit(exit) => return exit,
+        StartupMode::Register(guild) => return register_discord_commands(guild.as_deref()).await,
+        StartupMode::DiscordStatus => return discord_status(),
+        StartupMode::ServeInteractions => return serve_interactions().await,
+        StartupMode::Run => {}
     }
     init_tracing();
 
@@ -509,6 +535,112 @@ fn init_tracing() {
         .with_env_filter(filter)
         .with_target(false)
         .init();
+}
+
+/// Operator verbs that do not need a `BotConfig`.
+fn discord_status() -> ExitCode {
+    let present = |name: &str| {
+        if std::env::var(name).is_ok() {
+            "set"
+        } else {
+            "unset"
+        }
+    };
+    let base = std::env::var("DARKBOT_WEB_BASE")
+        .unwrap_or_else(|_| "https://darkhold.polarisocial.xyz".to_owned());
+    println!("darkbot Discord interactions (presence only, values never printed)");
+    println!(
+        "  DARKBOT_DISCORD_PUBLIC_KEY: {}",
+        present("DARKBOT_DISCORD_PUBLIC_KEY")
+    );
+    println!(
+        "  DISCORD_APPLICATION_ID:    {}",
+        present("DISCORD_APPLICATION_ID")
+    );
+    println!(
+        "  DISCORD_BOT_TOKEN:         {}",
+        present("DISCORD_BOT_TOKEN")
+    );
+    println!("  endpoint: {base}/api/discord/interactions");
+    ExitCode::SUCCESS
+}
+
+async fn register_discord_commands(guild: Option<&str>) -> ExitCode {
+    let Ok(token) = std::env::var("DISCORD_BOT_TOKEN") else {
+        eprintln!("DISCORD_BOT_TOKEN is not set; source the bot's env file first");
+        return ExitCode::FAILURE;
+    };
+    let Ok(application) = std::env::var("DISCORD_APPLICATION_ID") else {
+        eprintln!("DISCORD_APPLICATION_ID is not set (Developer Portal -> General Information)");
+        return ExitCode::FAILURE;
+    };
+    let url = match guild {
+        Some(id) => {
+            format!("https://discord.com/api/v10/applications/{application}/guilds/{id}/commands")
+        }
+        None => format!("https://discord.com/api/v10/applications/{application}/commands"),
+    };
+    let commands = darkbot::commands::definitions();
+    let subcommands = commands[0]["options"].as_array().map_or(0, Vec::len);
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => {
+            eprintln!("could not build an HTTP client: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    match client
+        .put(&url)
+        // A bot token is not an OAuth2 access token. `Bearer` gets a bare 401.
+        .header("authorization", format!("Bot {token}"))
+        .json(&commands)
+        .send()
+        .await
+    {
+        Ok(response) if response.status().is_success() => {
+            println!(
+                "registered 1 command with {subcommands} subcommand(s) for application {application} ({})",
+                match guild {
+                    Some(id) => format!("guild {id}, visible immediately"),
+                    None => "global, up to an hour to reach a newly joined server".to_owned(),
+                }
+            );
+            ExitCode::SUCCESS
+        }
+        Ok(response) => {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            eprintln!("discord refused the registration ({status}): {body}");
+            ExitCode::FAILURE
+        }
+        Err(error) => {
+            eprintln!("could not reach discord: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+async fn serve_interactions() -> ExitCode {
+    let bind =
+        std::env::var("DARKBOT_INTERACTIONS_BIND").unwrap_or_else(|_| "127.0.0.1:8087".to_owned());
+    let listener = match tokio::net::TcpListener::bind(&bind).await {
+        Ok(listener) => listener,
+        Err(error) => {
+            eprintln!("darkbot: cannot bind {bind}: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    println!("darkbot interactions listening on http://{bind}/discord/interactions");
+    match axum::serve(listener, darkbot::interactions::router()).await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("darkbot: interactions server failed: {error}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 #[cfg(test)]
