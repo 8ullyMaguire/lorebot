@@ -1,6 +1,6 @@
 # Discord interactions redesign for darkbot
 
-Status: M2 implemented 2026-11-20. M3–M4 planned. Owner decisions recorded 2026-11-20.
+Status: M3 code implemented and guild commands registered 2026-11-20; live endpoint/proof pending. M4 planned. Owner decisions recorded 2026-11-20.
 
 ## Problem
 
@@ -41,8 +41,8 @@ Decision: add an interactions transport to darkbot. Do not copy Ascend's 818-lin
 - `crates/darkbot/src/main.rs` also gains `discord-register [--guild ID]` and `discord-status` subcommands, following Ascend's admin verbs but using `DISCORD_BOT_TOKEN` / `DISCORD_APPLICATION_ID` from the bot's own env file.
 - Configuration additions:
   - `DARKBOT_DISCORD_PUBLIC_KEY` — public key from Developer Portal → General Information. No secret.
-  - `DISCORD_APPLICATION_ID` — read only by the register/status subcommand.
-  - `DISCORD_BOT_TOKEN` — read only by the register subcommand; never placed in the service's runtime env.
+  - `DISCORD_APPLICATION_ID` or the existing `DARKBOT_DISCORD_APPLICATION_ID` — read only by the register/status subcommand.
+  - `DISCORD_BOT_TOKEN` or the existing `DARKBOT_DISCORD_TOKEN` — read only by the register subcommand; never placed in the service's runtime env.
   - `DARKBOT_INTERACTIONS_BIND` — default `127.0.0.1:8087`; production exposes it through the existing reverse proxy at `https://darkhold.polarisocial.xyz/api/discord/interactions`.
   - `DARKBOT_DISCORD_GATEWAY` — default `0`; opt-in only for rollback. Matrix/Telegram are unaffected.
 

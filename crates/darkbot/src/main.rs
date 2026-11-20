@@ -136,6 +136,14 @@ async fn main() -> ExitCode {
     }
 }
 
+/// The legacy Discord gateway is opt-in. Interactions are the default Discord
+/// transport; Matrix/Telegram have no equivalent and keep their gateways.
+fn discord_gateway_enabled() -> bool {
+    std::env::var("DARKBOT_DISCORD_GATEWAY")
+        .map(|value| value == "1")
+        .unwrap_or(false)
+}
+
 async fn run() -> Result<(), darkbot_core::error::BotError> {
     // Validated at startup, not at first use. See the module docs.
     let config = Arc::new(BotConfig::from_env()?);
@@ -145,8 +153,12 @@ async fn run() -> Result<(), darkbot_core::error::BotError> {
     let dispatcher = Arc::new(Dispatcher::new(Arc::clone(&config), store.clone()));
 
     let mut running = Vec::new();
+    let gateway = discord_gateway_enabled();
     for (platform, platform_config) in &config.platforms {
         match platform {
+            Platform::Discord if !gateway => {
+                tracing::info!("discord gateway disabled; serve /discord/interactions instead");
+            }
             Platform::Discord => running.push(spawn_discord(
                 platform_config,
                 Arc::clone(&dispatcher),
@@ -163,6 +175,28 @@ async fn run() -> Result<(), darkbot_core::error::BotError> {
                 store.clone(),
             )),
         }
+    }
+
+    if std::env::var("DARKBOT_DISCORD_PUBLIC_KEY").is_ok() {
+        let bind = std::env::var("DARKBOT_INTERACTIONS_BIND")
+            .unwrap_or_else(|_| "127.0.0.1:8087".to_owned());
+        let listener = tokio::net::TcpListener::bind(&bind)
+            .await
+            .map_err(|error| {
+                darkbot_core::error::BotError::Config(format!(
+                    "cannot bind interactions listener {bind}: {error}"
+                ))
+            })?;
+        let router = darkbot::interactions::router(Arc::clone(&dispatcher));
+        tracing::info!(bind = %bind, "discord interactions listener ready");
+        running.push(Running {
+            name: "interactions",
+            handle: tokio::spawn(async move {
+                if let Err(error) = axum::serve(listener, router).await {
+                    tracing::error!(%error, "interactions listener failed");
+                }
+            }),
+        });
     }
 
     if running.is_empty() {
@@ -566,14 +600,20 @@ fn discord_status() -> ExitCode {
 }
 
 async fn register_discord_commands(guild: Option<&str>) -> ExitCode {
-    let Ok(token) = std::env::var("DISCORD_BOT_TOKEN") else {
+    let token = std::env::var("DISCORD_BOT_TOKEN")
+        .or_else(|_| std::env::var("DARKBOT_DISCORD_TOKEN"))
+        .unwrap_or_default();
+    if token.is_empty() {
         eprintln!("DISCORD_BOT_TOKEN is not set; source the bot's env file first");
         return ExitCode::FAILURE;
-    };
-    let Ok(application) = std::env::var("DISCORD_APPLICATION_ID") else {
+    }
+    let application = std::env::var("DISCORD_APPLICATION_ID")
+        .or_else(|_| std::env::var("DARKBOT_DISCORD_APPLICATION_ID"))
+        .unwrap_or_default();
+    if application.is_empty() {
         eprintln!("DISCORD_APPLICATION_ID is not set (Developer Portal -> General Information)");
         return ExitCode::FAILURE;
-    };
+    }
     let url = match guild {
         Some(id) => {
             format!("https://discord.com/api/v10/applications/{application}/guilds/{id}/commands")
@@ -842,5 +882,18 @@ mod tests {
             !filter.to_string().contains("debug"),
             "the default filter must not enable debug: {filter}"
         );
+    }
+
+    #[test]
+    fn discord_gateway_is_opt_in() {
+        let previous = std::env::var("DARKBOT_DISCORD_GATEWAY").ok();
+        std::env::remove_var("DARKBOT_DISCORD_GATEWAY");
+        assert!(!discord_gateway_enabled(), "unset means interactions only");
+        std::env::set_var("DARKBOT_DISCORD_GATEWAY", "1");
+        assert!(discord_gateway_enabled(), "explicit 1 keeps the gateway");
+        match previous {
+            Some(value) => std::env::set_var("DARKBOT_DISCORD_GATEWAY", value),
+            None => std::env::remove_var("DARKBOT_DISCORD_GATEWAY"),
+        }
     }
 }
